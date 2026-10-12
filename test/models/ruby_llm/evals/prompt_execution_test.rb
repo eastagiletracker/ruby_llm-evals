@@ -91,6 +91,25 @@ module RubyLLM::Evals
       assert_equal 0.0, execution.cost
     end
 
+    test "cost should return 0.0 when the model has no pricing in the registry" do
+      execution = ruby_llm_evals_prompt_executions(:one)
+
+      with_unpriced_model("unpriced-model", provider: "gemini") do
+        execution.run.update_columns(model: "unpriced-model")
+
+        assert_equal 0.0, execution.cost
+        assert_equal 0.0, execution.total_cost
+      end
+    end
+
+    test "cost should return 0.0 when the model is not in the registry" do
+      execution = ruby_llm_evals_prompt_executions(:one)
+      execution.run.update_columns(model: "gemini-model-that-does-not-exist")
+
+      assert_equal 0.0, execution.cost
+      assert_equal 0.0, execution.total_cost
+    end
+
     test "should track input tokens" do
       execution = ruby_llm_evals_prompt_executions(:one)
 
@@ -258,6 +277,24 @@ module RubyLLM::Evals
       assert_equal 0.0, execution.judge_cost
     end
 
+    test "judge_cost should return 0.0 when the judge model has no pricing in the registry" do
+      execution = ruby_llm_evals_prompt_executions(:one)
+
+      with_unpriced_model("unpriced-judge-model", provider: "gemini") do
+        execution.update_columns(judge_model: "unpriced-judge-model", judge_provider: "gemini", judge_input: 500, judge_output: 50)
+
+        assert_equal 0.0, execution.judge_cost
+        assert_equal execution.cost, execution.total_cost
+      end
+    end
+
+    test "judge_cost should return 0.0 when the judge model is not in the registry" do
+      execution = ruby_llm_evals_prompt_executions(:one)
+      execution.update_columns(judge_model: "gemini-judge-that-does-not-exist", judge_provider: "gemini", judge_input: 500, judge_output: 50)
+
+      assert_equal 0.0, execution.judge_cost
+    end
+
     test "total_cost should sum cost and judge_cost" do
       execution = ruby_llm_evals_prompt_executions(:one)
       execution.update_columns(
@@ -329,6 +366,17 @@ module RubyLLM::Evals
       ).round(4)
 
       assert_equal judge_cost, execution.judge_cost
+    end
+
+    private
+
+    def with_unpriced_model(id, provider:)
+      model = RubyLLM::Model::Info.new(id: id, name: id, provider: provider)
+      RubyLLM.models.all << model
+
+      yield
+    ensure
+      RubyLLM.models.all.delete(model)
     end
   end
 end

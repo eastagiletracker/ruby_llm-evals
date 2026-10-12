@@ -89,12 +89,21 @@ module RubyLLM
       def calculate_cost(model_name:, provider_name:, input_tokens:, output_tokens:, thinking_tokens:)
         return 0.0 if [ input_tokens, output_tokens ].all?(nil)
 
-        model, provider = RubyLLM.models.resolve(model_name, provider: provider_name)
+        model, provider = begin
+          RubyLLM.models.resolve(model_name, provider: provider_name)
+        rescue RubyLLM::ModelNotFoundError
+          # The model is no longer (or was never) in the RubyLLM registry, so there's no pricing to use.
+          return 0.0
+        end
         return 0.0 if provider.nil? || provider.local?
 
-        input_cost = input_tokens.to_f / 1_000_000.0 * model.input_price_per_million
-        output_cost = output_tokens.to_f / 1_000_000.0 * model.output_price_per_million
-        thinking_cost = thinking_tokens.to_f / 1_000_000.0 * model.output_price_per_million
+        # Some models in the registry have no pricing (and assume-exists providers like Azure never do).
+        input_price = model.input_price_per_million.to_f
+        output_price = model.output_price_per_million.to_f
+
+        input_cost = input_tokens.to_f / 1_000_000.0 * input_price
+        output_cost = output_tokens.to_f / 1_000_000.0 * output_price
+        thinking_cost = thinking_tokens.to_f / 1_000_000.0 * output_price
 
         (input_cost + output_cost + thinking_cost).round(4)
       end
